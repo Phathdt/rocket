@@ -9,13 +9,17 @@ datasource db {
 
 model Trip {
   id          String   @id @default(uuid())
-  passengerId String
-  driverId    String?
-  pickupLat   Float
-  pickupLng   Float
-  dropoffLat  Float
-  dropoffLng  Float
+  passengerId String   @map("passenger_id")
+  driverId    String?  @map("driver_id")
+  pickupLat   Float    @map("pickup_lat")
+  pickupLng   Float    @map("pickup_lng")
+  dropoffLat  Float    @map("dropoff_lat")
+  dropoffLng  Float    @map("dropoff_lng")
   status      String   @default("REQUESTED")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt       @map("updated_at")
+
+  @@index([passengerId])
+  @@index([driverId])
+  @@map("trips")
 }

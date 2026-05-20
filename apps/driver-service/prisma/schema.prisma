@@ -9,13 +9,14 @@ datasource db {
 
 model Driver {
   id           String   @id @default(uuid())
-  userId       String   @unique
+  userId       String   @unique @map("user_id")
   name         String
-  vehiclePlate String
-  vehicleModel String
+  vehiclePlate String   @map("vehicle_plate")
+  vehicleModel String   @map("vehicle_model")
   status       String   @default("OFFLINE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt       @map("updated_at")
 
+  @@index([status])
   @@map("drivers")
 }

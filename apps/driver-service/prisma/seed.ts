@@ -72,7 +72,7 @@ async function resolveUserIds(
   emails: string[],
 ): Promise<Map<string, string>> {
   const res = await pool.query<{ id: string; email: string }>(
-    'SELECT id, email FROM "user"."User" WHERE email = ANY($1)',
+    'SELECT id, email FROM "user"."users" WHERE email = ANY($1)',
     [emails],
   );
   return new Map(res.rows.map((r) => [r.email, r.id]));

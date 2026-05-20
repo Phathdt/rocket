@@ -11,10 +11,11 @@ generator client {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String   @map("password_hash")
   name         String
   role         String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @map("created_at")
 
+  @@map("users")
   @@schema("user")
 }
