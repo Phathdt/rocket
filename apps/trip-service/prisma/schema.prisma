@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Trip {
+  id          String   @id @default(uuid())
+  passengerId String
+  driverId    String?
+  pickupLat   Float
+  pickupLng   Float
+  dropoffLat  Float
+  dropoffLng  Float
+  status      String   @default("REQUESTED")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

@@ -1,0 +1,136 @@
+# Rocket — ride-hailing microservices demo.
+#
+# Default (`docker compose up -d`) starts ONLY the infra: Postgres + Redis.
+# The 4 backend services live under the `backend` profile and are opt-in:
+#
+#   docker compose up -d                      # infra only (recommended for dev)
+#   docker compose --profile backend up -d    # infra + 4 backend services
+#
+# Frontend apps (web-passenger / web-driver) are always run via `pnpm dev`.
+#
+# Inside this compose network, services reach infra at postgres:5432 / redis:6379.
+# From the host, infra is published on ${POSTGRES_HOST_PORT} / ${REDIS_HOST_PORT}.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: rocket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rocket
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rocket"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: rocket-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- Backend services (opt-in: `--profile backend`) ---------------------
+
+  user-service:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: apps/user-service/Dockerfile
+    container_name: rocket-user-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rocket?schema=user
+      JWT_SECRET: ${JWT_SECRET:-dev-super-secret-change-me}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      USER_SERVICE_PORT: "3001"
+    ports:
+      - "${USER_SERVICE_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  driver-service:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: apps/driver-service/Dockerfile
+    container_name: rocket-driver-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rocket?schema=driver
+      REDIS_URL: redis://redis:6379
+      DRIVER_SERVICE_PORT: "3002"
+    ports:
+      - "${DRIVER_SERVICE_PORT:-3002}:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  trip-service:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: apps/trip-service/Dockerfile
+    container_name: rocket-trip-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rocket?schema=trip
+      REDIS_URL: redis://redis:6379
+      DRIVER_SERVICE_URL: http://driver-service:3002
+      TRIP_SERVICE_PORT: "3003"
+    ports:
+      - "${TRIP_SERVICE_PORT:-3003}:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      driver-service:
+        condition: service_started
+
+  gateway:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    container_name: rocket-gateway
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-super-secret-change-me}
+      USER_SERVICE_URL: http://user-service:3001
+      DRIVER_SERVICE_URL: http://driver-service:3002
+      TRIP_SERVICE_URL: http://trip-service:3003
+      GATEWAY_PORT: "3000"
+    ports:
+      - "${GATEWAY_PORT:-3000}:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      driver-service:
+        condition: service_started
+      trip-service:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  redis-data:

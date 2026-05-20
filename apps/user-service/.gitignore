@@ -1,0 +1,8 @@
+# generated Prisma client (regenerated via prisma generate)
+src/generated/
+
+# build output
+dist/
+
+# env
+.env

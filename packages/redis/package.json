@@ -1,0 +1,39 @@
+{
+  "name": "@rocket/redis",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "ioredis": "^5.7.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@rocket/tsconfig": "workspace:*",
+    "@types/node": "^22.18.0",
+    "reflect-metadata": "^0.2.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  }
+}
