@@ -2,12 +2,16 @@
   "name": "@rocket/trip-service",
   "version": "0.0.0",
   "private": true,
+  "files": ["dist", "prisma", "prisma.config.ts"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "ts-node -r tsconfig-paths/register src/main.ts",
     "start": "node dist/main.js",
     "lint": "echo 'lint ok'",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
     "db:generate": "prisma generate --schema=prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma"
   },
@@ -22,18 +26,30 @@
     "@rocket/contracts": "workspace:*",
     "@rocket/redis": "workspace:*",
     "axios": "^1.9.0",
+    "dotenv": "^16.5.0",
     "nestjs-zod": "^4.3.1",
+    "prisma": "^7.8.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@nestjs/testing": "^11.1.21",
     "@rocket/tsconfig": "workspace:*",
+    "@swc/core": "^1.15.33",
+    "@testcontainers/postgresql": "^12.0.0",
+    "@testcontainers/redis": "^12.0.0",
     "@types/express": "^5.0.3",
     "@types/node": "^22.18.0",
-    "prisma": "^7.8.0",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "nock": "^14.0.15",
+    "supertest": "^7.2.2",
+    "testcontainers": "^12.0.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.7"
   }
 }
