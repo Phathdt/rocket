@@ -31,11 +31,14 @@ function makeMocks() {
     findByUserId: vi.fn(),
     updateStatus: vi.fn(),
     findManyByIdsAndStatus: vi.fn(),
+    setOfflineIfOnline: vi.fn(),
   };
   const geoRepo: IGeoRepository = {
     addLocation: vi.fn(),
     removeDriver: vi.fn(),
     searchNearby: vi.fn(),
+    checkPresence: vi.fn(),
+    getStaleSince: vi.fn(),
     acquireLock: vi.fn(),
     releaseLock: vi.fn(),
   };
@@ -164,14 +167,16 @@ describe('DriverService', () => {
       vi.mocked(geoRepo.searchNearby).mockResolvedValue([]);
       await expect(service.findNearby(1, 2, 5, 10)).resolves.toEqual([]);
       expect(driverRepo.findManyByIdsAndStatus).not.toHaveBeenCalled();
+      expect(geoRepo.checkPresence).not.toHaveBeenCalled();
     });
 
-    it('keeps only ONLINE candidates and maps results', async () => {
+    it('keeps only presence-alive ONLINE candidates and maps results', async () => {
       vi.mocked(geoRepo.searchNearby).mockResolvedValue([
         { driverId: 'd1', distanceKm: 0.5 },
         { driverId: 'd2', distanceKm: 1.2 },
       ]);
-      // d2 is not returned by the repo => it is filtered out (e.g. BUSY/OFFLINE)
+      // d1 is alive, d2 is a ghost (presence expired)
+      vi.mocked(geoRepo.checkPresence).mockResolvedValue(new Set(['d1']));
       vi.mocked(driverRepo.findManyByIdsAndStatus).mockResolvedValue([
         makeDriver({ id: 'd1', name: 'Alice', status: DriverStatus.ONLINE }),
       ]);
@@ -186,10 +191,24 @@ describe('DriverService', () => {
           distanceKm: 0.5,
         },
       ]);
+      // checkPresence called with all geo candidates
+      expect(geoRepo.checkPresence).toHaveBeenCalledWith(['d1', 'd2']);
+      // findManyByIdsAndStatus called only with presence-alive ids
       expect(driverRepo.findManyByIdsAndStatus).toHaveBeenCalledWith(
-        ['d1', 'd2'],
+        ['d1'],
         DriverStatus.ONLINE,
       );
+    });
+
+    it('returns empty when all candidates are ghosts (presence expired)', async () => {
+      vi.mocked(geoRepo.searchNearby).mockResolvedValue([
+        { driverId: 'd1', distanceKm: 0.5 },
+      ]);
+      vi.mocked(geoRepo.checkPresence).mockResolvedValue(new Set());
+
+      const result = await service.findNearby(1, 2, 5, 10);
+      expect(result).toEqual([]);
+      expect(driverRepo.findManyByIdsAndStatus).not.toHaveBeenCalled();
     });
   });
 

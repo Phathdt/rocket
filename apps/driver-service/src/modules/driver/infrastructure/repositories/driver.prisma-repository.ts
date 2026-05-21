@@ -1,3 +1,4 @@
+import { DriverStatus } from '@rocket/contracts';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Driver } from '../../domain/entities/driver.entity';
 import { IDriverRepository } from '../../domain/interfaces/driver.repository';
@@ -63,5 +64,12 @@ export class DriverPrismaRepository extends IDriverRepository {
       where: { id: { in: ids }, status },
     });
     return rows.map(toEntity);
+  }
+
+  async setOfflineIfOnline(id: string): Promise<void> {
+    await this.prisma.driver.updateMany({
+      where: { id, status: DriverStatus.ONLINE },
+      data: { status: DriverStatus.OFFLINE },
+    });
   }
 }

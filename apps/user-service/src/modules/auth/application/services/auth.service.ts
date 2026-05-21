@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
-import type { AuthResponse, RegisterInput, LoginInput } from '@rocket/contracts';
+import type { AuthResponse, RegisterInput, LoginInput, UserRole } from '@rocket/contracts';
 import { IUserRepository } from '../../../user/domain/interfaces/user.repository';
 import { EmailAlreadyRegisteredError, InvalidCredentialsError } from '../../domain/errors';
 import { IAuthService, TokenPayload } from '../../domain/interfaces/auth.service';
@@ -35,7 +35,7 @@ export class AuthService implements IAuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role as 'PASSENGER' | 'DRIVER',
+        role: user.role as UserRole,
       },
     };
   }
@@ -58,7 +58,7 @@ export class AuthService implements IAuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role as 'PASSENGER' | 'DRIVER',
+        role: user.role as UserRole,
       },
     };
   }

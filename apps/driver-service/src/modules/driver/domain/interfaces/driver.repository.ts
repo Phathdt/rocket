@@ -15,4 +15,10 @@ export abstract class IDriverRepository {
   abstract updateStatus(id: string, status: string): Promise<Driver>;
 
   abstract findManyByIdsAndStatus(ids: string[], status: string): Promise<Driver[]>;
+
+  /**
+   * Sets status=OFFLINE only when the current status is ONLINE.
+   * Used by the liveness sweeper — does NOT clobber BUSY drivers.
+   */
+  abstract setOfflineIfOnline(id: string): Promise<void>;
 }

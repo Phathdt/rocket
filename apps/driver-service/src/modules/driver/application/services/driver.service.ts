@@ -71,17 +71,30 @@ export class DriverService implements IDriverService {
     radiusKm: number,
     limit: number,
   ): Promise<NearbyDriverResult[]> {
+    // searchNearby over-fetches (limit*10 or 50) to avoid ghost starvation
     const candidates = await this.geoRepo.searchNearby(lat, lng, radiusKm, limit);
     if (candidates.length === 0) return [];
 
-    // Filter: only keep ONLINE drivers (exclude BUSY / OFFLINE)
     const ids = candidates.map((c) => c.driverId);
-    const drivers = await this.driverRepo.findManyByIdsAndStatus(ids, DriverStatus.ONLINE);
+
+    // Change 1: presence filter via single Redis pipeline — drops ghosts ≤30s after last ping
+    const aliveIds = await this.geoRepo.checkPresence(ids);
+
+    // Filter: presence-alive AND Postgres status=ONLINE (exclude BUSY / OFFLINE / ghosts)
+    const presenceAlive = candidates.filter((c) => aliveIds.has(c.driverId));
+    if (presenceAlive.length === 0) return [];
+
+    const aliveDriverIds = presenceAlive.map((c) => c.driverId);
+    const drivers = await this.driverRepo.findManyByIdsAndStatus(
+      aliveDriverIds,
+      DriverStatus.ONLINE,
+    );
 
     const onlineIds = new Set(drivers.map((d) => d.id));
 
-    return candidates
+    return presenceAlive
       .filter((c) => onlineIds.has(c.driverId))
+      .slice(0, limit)
       .map((c) => {
         const d = drivers.find((dr) => dr.id === c.driverId)!;
         return {
