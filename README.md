@@ -69,12 +69,13 @@ calls `user-service` `/auth/verify` to validate the JWT; `/auth` is public.
 
 ### Tech stack
 
-| Layer    | Tech |
-|----------|------|
-| Edge     | Traefik v3 (routing · LB · CORS · JWT ForwardAuth) |
+| Layer    | Tech                                                                                  |
+| -------- | ------------------------------------------------------------------------------------- |
+| Edge     | Traefik v3 (routing · LB · CORS · JWT ForwardAuth)                                    |
 | Backend  | NestJS 11 · Prisma 7 · PostgreSQL 16 · Redis 7 (ioredis) · Socket.IO 4 · `nestjs-zod` |
-| Frontend | Vite + React 19 · TailwindCSS + shadcn/ui · TanStack React Query 5 · Axios · Leaflet |
-| Shared   | Zod contracts (`packages/contracts`) · Turborepo 2 · pnpm workspace |
+| Frontend | Vite + React 19 · TailwindCSS + shadcn/ui · TanStack React Query 5 · Axios · Leaflet  |
+| Shared   | Zod contracts (`packages/contracts`) · Turborepo 2 · pnpm workspace                   |
+| Tooling  | oxlint (lint) · oxfmt (format) · lefthook (git hooks)                                 |
 
 ---
 
@@ -88,18 +89,18 @@ calls `user-service` `/auth/verify` to validate the JWT; `/auth` is public.
 
 ## Ports
 
-| Service           | Port  | Notes |
-|-------------------|-------|-------|
-| Traefik (edge)    | 80    | single public entry point (REST + WebSocket) |
-| Traefik dashboard | 8080  | routing/health UI |
-| User Service      | 3001  | internal (`/auth` `/users`) |
-| Driver Service    | 3002  | internal (`/drivers`) |
-| Trip Service      | 3003  | internal (`/trips`) |
-| Realtime Service  | 3004  | internal (`/socket.io` WebSocket hub) |
-| web-passenger     | 5173  | Vite dev server |
-| web-driver        | 5174  | Vite dev server |
-| PostgreSQL        | 55432* | host port, set by `POSTGRES_HOST_PORT` |
-| Redis             | 56379* | host port, set by `REDIS_HOST_PORT` |
+| Service           | Port    | Notes                                        |
+| ----------------- | ------- | -------------------------------------------- |
+| Traefik (edge)    | 80      | single public entry point (REST + WebSocket) |
+| Traefik dashboard | 8080    | routing/health UI                            |
+| User Service      | 3001    | internal (`/auth` `/users`)                  |
+| Driver Service    | 3002    | internal (`/drivers`)                        |
+| Trip Service      | 3003    | internal (`/trips`)                          |
+| Realtime Service  | 3004    | internal (`/socket.io` WebSocket hub)        |
+| web-passenger     | 5173    | Vite dev server                              |
+| web-driver        | 5174    | Vite dev server                              |
+| PostgreSQL        | 55432\* | host port, set by `POSTGRES_HOST_PORT`       |
+| Redis             | 56379\* | host port, set by `REDIS_HOST_PORT`          |
 
 \* `.env.example` defaults Postgres/Redis to host ports `55432`/`56379` to avoid
 clashing with any local Postgres/Redis on the standard `5432`/`6379`. Inside the
@@ -177,10 +178,10 @@ Open:
 
 After `pnpm db:seed` the following accounts exist (password is `password` for all):
 
-| Email                     | Role      |
-|---------------------------|-----------|
-| `passenger1@rocket.dev`   | PASSENGER |
-| `passenger2@rocket.dev`   | PASSENGER |
+| Email                                                 | Role                |
+| ----------------------------------------------------- | ------------------- |
+| `passenger1@rocket.dev`                               | PASSENGER           |
+| `passenger2@rocket.dev`                               | PASSENGER           |
 | `sim-driver-1@rocket.dev` … `sim-driver-5@rocket.dev` | DRIVER (5 accounts) |
 
 **Fastest demo (using `db:seed:online`):**
@@ -207,17 +208,37 @@ After `pnpm db:seed` the following accounts exist (password is `password` for al
 
 ## Useful commands
 
-| Command                  | Description |
-|--------------------------|-------------|
-| `pnpm dev`               | run all 4 backend services + 2 frontend apps (Turbo) |
-| `pnpm build`             | build all packages and apps |
-| `pnpm db:migrate`        | apply Prisma migrations for every service |
-| `pnpm db:seed`           | seed users then drivers (sequential, idempotent) |
-| `pnpm db:seed:online`    | set the 5 seeded drivers ONLINE + located (calls Driver Service REST API) |
-| `pnpm type-check`        | type-check every package |
-| `docker compose up -d`   | start Traefik + Postgres + Redis |
-| `docker compose --profile backend up -d --build` | start edge + infra + 4 backend services |
-| `docker compose down -v` | stop everything and wipe DB/Redis volumes |
+| Command                                          | Description                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------- |
+| `pnpm dev`                                       | run all 4 backend services + 2 frontend apps (Turbo)                      |
+| `pnpm build`                                     | build all packages and apps                                               |
+| `pnpm lint`                                      | lint all source with oxlint                                               |
+| `pnpm format`                                    | format all source with oxfmt (`pnpm format:check` to verify)              |
+| `pnpm test`                                      | run the test suite across all services (Turbo)                            |
+| `pnpm db:migrate`                                | apply Prisma migrations for every service                                 |
+| `pnpm db:seed`                                   | seed users then drivers (sequential, idempotent)                          |
+| `pnpm db:seed:online`                            | set the 5 seeded drivers ONLINE + located (calls Driver Service REST API) |
+| `pnpm type-check`                                | type-check every package                                                  |
+| `docker compose up -d`                           | start Traefik + Postgres + Redis                                          |
+| `docker compose --profile backend up -d --build` | start edge + infra + 4 backend services                                   |
+| `docker compose down -v`                         | stop everything and wipe DB/Redis volumes                                 |
+
+---
+
+## Code quality
+
+- **Lint** — `oxlint` (config `.oxlintrc.json`): `pnpm lint`.
+- **Format** — `oxfmt` (config `.oxfmtrc.json`, Prettier-compatible): `pnpm format`.
+- **Git hooks** — `lefthook` (config `lefthook.yml`): the `pre-commit` hook runs
+  format + lint (on staged files) + the test suite. Installed automatically by
+  the `prepare` script on `pnpm install`.
+
+Backend services follow a **clean architecture** layout — each domain is a
+module under `src/modules/<name>/` split into `application/` (use-case
+services), `domain/` (entities, Zod DTOs, errors, abstract-class interfaces),
+`infrastructure/` (Prisma repositories, Redis, external clients) and
+`presentation/` (REST controllers). Providers are wired explicitly in the
+module via `useFactory`.
 
 ---
 
