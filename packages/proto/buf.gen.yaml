@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  # Local ts-proto plugin (protoc-gen-ts_proto), resolved from node_modules/.bin.
+  # Avoids dependence on the buf remote plugin registry.
+  - local: protoc-gen-ts_proto
+    out: src/generated
+    opt:
+      - nestJs=true
+      - useDate=false
+      - snakeToCamel=true
+      - outputServices=grpc-js

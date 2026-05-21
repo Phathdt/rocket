@@ -57,9 +57,10 @@ calls `user-service` `/auth/verify` to validate the JWT; `/auth` is public.
 
 **Inter-service communication**
 
-- **Synchronous:** REST between services (e.g. Trip Service → Driver Service to
-  assign a driver). Each cross-service call is wrapped in a thin client class so
-  it can be swapped for gRPC later (see "Future: gRPC path").
+- **Synchronous:** **gRPC** for Trip Service → Driver Service (`findNearby` /
+  `assign` / `release`) — proto contract in `packages/proto`. Driver Service is a
+  hybrid app: REST `:3002` for the frontend, gRPC `:50051` for Trip Service. The
+  call sits behind the `IDriverClient` interface, so the transport is swappable.
 - **Asynchronous:** Redis Pub/Sub. Services publish trip/driver events; the
   Realtime Service subscribes and broadcasts them to the WebSocket room
   `trip:<id>`.
@@ -89,18 +90,19 @@ calls `user-service` `/auth/verify` to validate the JWT; `/auth` is public.
 
 ## Ports
 
-| Service           | Port    | Notes                                        |
-| ----------------- | ------- | -------------------------------------------- |
-| Traefik (edge)    | 80      | single public entry point (REST + WebSocket) |
-| Traefik dashboard | 8080    | routing/health UI                            |
-| User Service      | 3001    | internal (`/auth` `/users`)                  |
-| Driver Service    | 3002    | internal (`/drivers`)                        |
-| Trip Service      | 3003    | internal (`/trips`)                          |
-| Realtime Service  | 3004    | internal (`/socket.io` WebSocket hub)        |
-| web-passenger     | 5173    | Vite dev server                              |
-| web-driver        | 5174    | Vite dev server                              |
-| PostgreSQL        | 55432\* | host port, set by `POSTGRES_HOST_PORT`       |
-| Redis             | 56379\* | host port, set by `REDIS_HOST_PORT`          |
+| Service             | Port    | Notes                                        |
+| ------------------- | ------- | -------------------------------------------- |
+| Traefik (edge)      | 80      | single public entry point (REST + WebSocket) |
+| Traefik dashboard   | 8080    | routing/health UI                            |
+| User Service        | 3001    | internal (`/auth` `/users`)                  |
+| Driver Service      | 3002    | internal (`/drivers` REST)                   |
+| Driver Service gRPC | 50051   | internal (gRPC, called by Trip Service)      |
+| Trip Service        | 3003    | internal (`/trips`)                          |
+| Realtime Service    | 3004    | internal (`/socket.io` WebSocket hub)        |
+| web-passenger       | 5173    | Vite dev server                              |
+| web-driver          | 5174    | Vite dev server                              |
+| PostgreSQL          | 55432\* | host port, set by `POSTGRES_HOST_PORT`       |
+| Redis               | 56379\* | host port, set by `REDIS_HOST_PORT`          |
 
 \* `.env.example` defaults Postgres/Redis to host ports `55432`/`56379` to avoid
 clashing with any local Postgres/Redis on the standard `5432`/`6379`. Inside the
@@ -280,11 +282,15 @@ cd apps/user-service && pnpm exec prisma migrate dev
 
 ---
 
-## Future: gRPC path
+## gRPC
 
-All service-to-service calls currently go over REST, but each one is wrapped in
-a thin client class (e.g. `DriverClient` in the Trip Service). Migrating to gRPC
-later means swapping the implementation inside those client classes — the
-calling code (controllers, services) does not change. The synchronous REST hops
-between services are the natural candidates for gRPC; the Traefik ↔ frontend
-boundary stays REST + WebSocket.
+The Trip Service → Driver Service call runs over **gRPC**. The proto contract
+lives in `packages/proto` (`rocket.driver.v1.DriverService`); TypeScript is
+generated with ts-proto. Driver Service is a hybrid app — REST `:3002` for the
+frontend, gRPC `:50051` for the Trip Service. The call sits behind the
+`IDriverClient` interface, so swapping transports touched only one file
+(`grpc-driver.client.ts`), not the matching logic.
+
+Other boundaries deliberately stay on REST/WebSocket: the Traefik ↔ frontend
+edge (browsers don't speak gRPC) and Traefik ForwardAuth → User Service
+`/auth/verify`. Async events stay on Redis Pub/Sub.

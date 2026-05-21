@@ -1,16 +1,23 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ZodValidationPipe } from 'nestjs-zod';
 import request from 'supertest';
-import nock from 'nock';
 import type { INestApplication } from '@nestjs/common';
 import { TripStatus } from '@rocket/contracts';
 import { PrismaService } from '../../src/modules/prisma/prisma.service';
+import { IDriverClient } from '../../src/modules/trip/domain/interfaces/driver-client';
 
-const DRIVER_URL = 'http://driver-service.test';
 const VALID_BODY = {
   pickup: { lat: 10, lng: 20 },
   dropoff: { lat: 30, lng: 40 },
+};
+
+// Fake IDriverClient — the trip↔driver transport (gRPC) is irrelevant here;
+// these tests exercise the controller + matching/lifecycle against a stub.
+const driverClient = {
+  findNearby: vi.fn(),
+  assign: vi.fn(),
+  release: vi.fn(),
 };
 
 let app: INestApplication;
@@ -19,9 +26,11 @@ let prisma: PrismaService;
 beforeAll(async () => {
   process.env.DATABASE_URL = inject('databaseUrl');
   process.env.REDIS_URL = inject('redisUrl');
-  process.env.DRIVER_SERVICE_URL = DRIVER_URL;
   const { AppModule } = await import('../../src/app.module');
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(IDriverClient)
+    .useValue(driverClient)
+    .compile();
   app = moduleRef.createNestApplication();
   app.useGlobalPipes(new ZodValidationPipe());
   await app.init();
@@ -30,25 +39,19 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  nock.cleanAll();
 });
 
 beforeEach(async () => {
   await prisma.trip.deleteMany();
+  vi.resetAllMocks();
+  // Default: exactly one driver available and assignable.
+  driverClient.findNearby.mockResolvedValue([{ driverId: 'drv-1', distanceKm: 1 }]);
+  driverClient.assign.mockResolvedValue({ ok: true });
+  driverClient.release.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
-  nock.cleanAll();
-});
-
-/** Create a trip directly through the API with a single available driver. */
+/** Create a trip through the API; the default stub yields one available driver. */
 async function createAssignedTrip(): Promise<string> {
-  nock(DRIVER_URL)
-    .get('/drivers/nearby')
-    .query(true)
-    .reply(200, [{ driverId: 'drv-1', distanceKm: 1 }]);
-  nock(DRIVER_URL).post('/drivers/drv-1/assign').reply(200, { ok: true });
-
   const res = await request(app.getHttpServer())
     .post('/trips')
     .set('x-user-id', 'pax-1')
@@ -80,7 +83,7 @@ describe('TripController (integration)', () => {
     });
 
     it('creates a NO_DRIVER trip when no driver is nearby', async () => {
-      nock(DRIVER_URL).get('/drivers/nearby').query(true).reply(200, []);
+      driverClient.findNearby.mockResolvedValueOnce([]);
 
       const res = await request(app.getHttpServer())
         .post('/trips')
@@ -144,11 +147,11 @@ describe('TripController (integration)', () => {
     it('transitions ONGOING -> COMPLETED and releases the driver', async () => {
       const id = await createAssignedTrip();
       await request(app.getHttpServer()).post(`/trips/${id}/start`);
-      nock(DRIVER_URL).post('/drivers/drv-1/release').reply(200, {});
 
       const res = await request(app.getHttpServer()).post(`/trips/${id}/complete`);
       expect(res.status).toBe(201);
       expect(res.body.status).toBe(TripStatus.COMPLETED);
+      expect(driverClient.release).toHaveBeenCalledWith('drv-1');
     });
 
     it('returns 409 when the trip is not ONGOING', async () => {
@@ -161,16 +164,15 @@ describe('TripController (integration)', () => {
   describe('POST /trips/:id/cancel', () => {
     it('cancels an ASSIGNED trip and releases the driver', async () => {
       const id = await createAssignedTrip();
-      nock(DRIVER_URL).post('/drivers/drv-1/release').reply(200, {});
 
       const res = await request(app.getHttpServer()).post(`/trips/${id}/cancel`);
       expect(res.status).toBe(201);
       expect(res.body.status).toBe(TripStatus.CANCELLED);
+      expect(driverClient.release).toHaveBeenCalledWith('drv-1');
     });
 
     it('returns 409 when cancelling an already-cancelled trip', async () => {
       const id = await createAssignedTrip();
-      nock(DRIVER_URL).post('/drivers/drv-1/release').reply(200, {});
       await request(app.getHttpServer()).post(`/trips/${id}/cancel`);
 
       const res = await request(app.getHttpServer()).post(`/trips/${id}/cancel`);

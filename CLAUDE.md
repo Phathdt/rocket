@@ -32,12 +32,15 @@ Turborepo + pnpm workspace.
 - **Traefik** (`:80`) is the single entry point — routes REST (`/auth` `/users`
   `/drivers` `/trips`) + `/socket.io`; CORS middleware; JWT via `ForwardAuth`
   middleware → `user-service` `GET /auth/verify`. There is no NestJS gateway.
-- Backend: user `:3001`, driver `:3002`, trip `:3003`, realtime `:3004`.
+- Backend: user `:3001`, driver `:3002` (REST) + `:50051` (gRPC), trip `:3003`,
+  realtime `:3004`.
 - One Postgres DB `rocket` with 3 schemas (`user`/`driver`/`trip`) — schema per
   service, each with its own Prisma client + migrations. Redis: GEO matching +
   Pub/Sub events + presence TTL.
-- Inter-service: REST (wrapped in thin client classes for a future gRPC swap) +
-  Redis Pub/Sub (realtime-service subscribes, broadcasts to room `trip:<id>`).
+- Inter-service: **gRPC** for trip → driver (`findNearby`/`assign`/`release`,
+  proto in `packages/proto`, behind the `IDriverClient` interface; driver-service
+  is hybrid REST+gRPC). Other boundaries stay REST/WS. Redis Pub/Sub for async
+  events (realtime-service subscribes, broadcasts to room `trip:<id>`).
 
 ## Conventions — IMPORTANT
 

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { HttpModule, HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
+import { ClientGrpc, ClientProxyFactory, Transport } from '@nestjs/microservices';
 import { REDIS_CLIENT, type RedisClient } from '@rocket/redis';
+import { DRIVER_PROTO_PATH } from '@rocket/proto';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { ITripRepository } from './domain/interfaces/trip-repository';
@@ -14,13 +14,14 @@ import { TripService } from './application/services/trip.service';
 import { MatchingService } from './application/services/matching.service';
 
 import { TripPrismaRepository } from './infrastructure/repositories/trip.prisma-repository';
-import { HttpDriverClient } from './infrastructure/clients/http-driver.client';
+import { GrpcDriverClient } from './infrastructure/clients/grpc-driver.client';
 import { RedisTripEventsPublisher } from './infrastructure/events/redis-trip-events.publisher';
 
 import { TripController } from './presentation/trip.controller';
 
+const DRIVER_GRPC_CLIENT = 'DRIVER_GRPC_CLIENT';
+
 @Module({
-  imports: [HttpModule],
   controllers: [TripController],
   providers: [
     {
@@ -29,12 +30,21 @@ import { TripController } from './presentation/trip.controller';
       inject: [PrismaService],
     },
     {
+      provide: DRIVER_GRPC_CLIENT,
+      useFactory: () =>
+        ClientProxyFactory.create({
+          transport: Transport.GRPC,
+          options: {
+            package: 'rocket.driver.v1',
+            protoPath: DRIVER_PROTO_PATH,
+            url: process.env.DRIVER_GRPC_URL ?? 'localhost:50051',
+          },
+        }),
+    },
+    {
       provide: IDriverClient,
-      useFactory: (http: HttpService, config: ConfigService) => {
-        const baseUrl = config.get<string>('DRIVER_SERVICE_URL', 'http://localhost:3002');
-        return new HttpDriverClient(http, baseUrl);
-      },
-      inject: [HttpService, ConfigService],
+      useFactory: (grpcClient: ClientGrpc) => new GrpcDriverClient(grpcClient),
+      inject: [DRIVER_GRPC_CLIENT],
     },
     {
       provide: ITripEventsPublisher,

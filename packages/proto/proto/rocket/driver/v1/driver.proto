@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package rocket.driver.v1;
+
+// Driver service gRPC contract.
+// Faithful replacement for the HTTP-based IDriverClient in trip-service.
+service DriverService {
+  // Find drivers near a coordinate, ordered by distance.
+  rpc FindNearby(FindNearbyRequest) returns (FindNearbyResponse);
+  // Atomically lock a driver to a trip. ok=false when already locked.
+  rpc Assign(AssignRequest) returns (AssignResponse);
+  // Release a previously assigned driver lock. Non-fatal / idempotent.
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+}
+
+message FindNearbyRequest {
+  double lat = 1;
+  double lng = 2;
+  double radius_km = 3;
+  int32 limit = 4;
+}
+
+message NearbyDriver {
+  string driver_id = 1;
+  double distance_km = 2;
+  string name = 3;
+  string vehicle_plate = 4;
+  string vehicle_model = 5;
+}
+
+message FindNearbyResponse {
+  repeated NearbyDriver drivers = 1;
+}
+
+message AssignRequest {
+  string driver_id = 1;
+}
+
+message AssignResponse {
+  bool ok = 1;
+}
+
+message ReleaseRequest {
+  string driver_id = 1;
+}
+
+message ReleaseResponse {}

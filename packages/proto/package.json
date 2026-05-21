@@ -1,0 +1,45 @@
+{
+  "name": "@rocket/proto",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "build",
+    "proto/**"
+  ],
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "require": "./build/index.js",
+      "default": "./build/index.js"
+    },
+    "./proto/*": "./proto/*"
+  },
+  "scripts": {
+    "generate": "buf generate",
+    "build": "tsc -p tsconfig.json",
+    "type-check": "tsc --noEmit",
+    "lint:proto": "buf lint",
+    "clean": "rm -rf build"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "@grpc/grpc-js": "^1.12.0",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.47.2",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/microservices": "^11.1.6",
+    "@rocket/tsconfig": "workspace:*",
+    "@types/node": "^22.18.0",
+    "protobufjs": "^7.4.0",
+    "ts-proto": "^2.6.1",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/microservices": "^11.0.0"
+  }
+}

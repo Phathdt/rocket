@@ -11,9 +11,10 @@ import { RedisGeoRepository } from './infrastructure/geo/redis-geo.repository';
 import { DriverPrismaRepository } from './infrastructure/repositories/driver.prisma-repository';
 import { LivenessSweeper } from './infrastructure/sweeper/liveness-sweeper';
 import { DriverController } from './presentation/driver.controller';
+import { DriverGrpcController } from './presentation/driver.grpc-controller';
 
 @Module({
-  controllers: [DriverController],
+  controllers: [DriverController, DriverGrpcController],
   providers: [
     {
       provide: DriverEventsPublisher,
@@ -33,16 +34,14 @@ import { DriverController } from './presentation/driver.controller';
     },
     {
       provide: IDriverService,
-      useFactory: (repo: IDriverRepository, geo: IGeoRepository) =>
-        new DriverService(repo, geo),
+      useFactory: (repo: IDriverRepository, geo: IGeoRepository) => new DriverService(repo, geo),
       inject: [IDriverRepository, IGeoRepository],
     },
     {
       // Plain class, no @Injectable() — lifecycle hooks fire because NestJS
       // calls onModuleInit/onModuleDestroy on every provider value.
       provide: LivenessSweeper,
-      useFactory: (geo: IGeoRepository, repo: IDriverRepository) =>
-        new LivenessSweeper(geo, repo),
+      useFactory: (geo: IGeoRepository, repo: IDriverRepository) => new LivenessSweeper(geo, repo),
       inject: [IGeoRepository, IDriverRepository],
     },
   ],
