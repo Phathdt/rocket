@@ -44,6 +44,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # --- Edge proxy: routing / TLS / LB / CORS ------------------------------
+
+  traefik:
+    image: traefik:v3
+    container_name: rocket-traefik
+    restart: unless-stopped
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # --- Backend services (opt-in: `--profile backend`) ---------------------
 
   user-service:
@@ -105,31 +120,22 @@ services:
       driver-service:
         condition: service_started
 
-  gateway:
+  realtime-service:
     profiles: ["backend"]
     build:
       context: .
-      dockerfile: apps/gateway/Dockerfile
-    container_name: rocket-gateway
+      dockerfile: apps/realtime-service/Dockerfile
+    container_name: rocket-realtime-service
     restart: unless-stopped
     environment:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-super-secret-change-me}
-      USER_SERVICE_URL: http://user-service:3001
-      DRIVER_SERVICE_URL: http://driver-service:3002
-      TRIP_SERVICE_URL: http://trip-service:3003
-      GATEWAY_PORT: "3000"
+      REALTIME_SERVICE_PORT: "3004"
     ports:
-      - "${GATEWAY_PORT:-3000}:3000"
+      - "${REALTIME_SERVICE_PORT:-3004}:3004"
     depends_on:
       redis:
         condition: service_healthy
-      user-service:
-        condition: service_started
-      driver-service:
-        condition: service_started
-      trip-service:
-        condition: service_started
 
 volumes:
   postgres-data:

@@ -9,4 +9,8 @@ export class JwtTokenSigner extends ITokenSigner {
   sign(payload: Record<string, unknown>): string {
     return this.jwt.sign(payload);
   }
+
+  verify(token: string): Record<string, unknown> {
+    return this.jwt.verify<Record<string, unknown>>(token);
+  }
 }

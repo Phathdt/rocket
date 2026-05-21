@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:3000';
+// Traefik edge proxy on :80 is the single entry point (REST + WebSocket).
+const BASE_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

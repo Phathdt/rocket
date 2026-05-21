@@ -10,7 +10,8 @@ export interface SimConfig {
 }
 
 const DEFAULTS = {
-  gateway: 'http://localhost:3000',
+  // Traefik edge proxy on :80 is the single entry point.
+  gateway: 'http://localhost',
   count: 5,
   center: { lat: 10.7769, lng: 106.7009 }, // HCMC District 1
   radiusKm: 3,

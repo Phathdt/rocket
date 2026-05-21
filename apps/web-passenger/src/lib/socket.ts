@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 
-const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost:3000';
+// Traefik routes the Socket.IO default path (/socket.io) to realtime-service.
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://localhost';
 
 let socket: Socket | null = null;
 

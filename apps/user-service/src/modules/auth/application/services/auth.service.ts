@@ -1,8 +1,9 @@
 import * as bcrypt from 'bcrypt';
+import { UnauthorizedException } from '@nestjs/common';
 import type { AuthResponse, RegisterInput, LoginInput } from '@rocket/contracts';
 import { IUserRepository } from '../../../user/domain/interfaces/user.repository';
 import { EmailAlreadyRegisteredError, InvalidCredentialsError } from '../../domain/errors';
-import { IAuthService } from '../../domain/interfaces/auth.service';
+import { IAuthService, TokenPayload } from '../../domain/interfaces/auth.service';
 import { ITokenSigner } from '../../domain/interfaces/token-signer';
 
 const BCRYPT_SALT_ROUNDS = 10;
@@ -60,5 +61,20 @@ export class AuthService implements IAuthService {
         role: user.role as 'PASSENGER' | 'DRIVER',
       },
     };
+  }
+
+  async verifyToken(token: string): Promise<TokenPayload> {
+    try {
+      const payload = this.tokens.verify(token);
+      const sub = payload['sub'];
+      const role = payload['role'];
+      const email = payload['email'];
+      if (typeof sub !== 'string' || typeof role !== 'string' || typeof email !== 'string') {
+        throw new UnauthorizedException('Invalid token payload');
+      }
+      return { sub, role, email };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
   }
 }

@@ -1,0 +1,75 @@
+# Traefik dynamic configuration — routers, services, middlewares.
+# Hot-reloaded on change (providers.file.watch in traefik.yml).
+#
+# Backend services run on the host (pnpm dev), Traefik runs in Docker —
+# hence host.docker.internal. ForwardAuth middleware is added in Phase 3.
+
+http:
+  routers:
+    # --- public ---
+    auth:
+      rule: "PathPrefix(`/auth`)"
+      entryPoints: ["web"]
+      service: user-service
+      middlewares: ["cors"]
+
+    realtime:
+      rule: "PathPrefix(`/socket.io`)"
+      entryPoints: ["web"]
+      service: realtime-service
+      middlewares: ["cors"]
+
+    # --- protected (jwt-auth ForwardAuth middleware) ---
+    users:
+      rule: "PathPrefix(`/users`)"
+      entryPoints: ["web"]
+      service: user-service
+      middlewares: ["cors", "jwt-auth"]
+
+    drivers:
+      rule: "PathPrefix(`/drivers`)"
+      entryPoints: ["web"]
+      service: driver-service
+      middlewares: ["cors", "jwt-auth"]
+
+    trips:
+      rule: "PathPrefix(`/trips`)"
+      entryPoints: ["web"]
+      service: trip-service
+      middlewares: ["cors", "jwt-auth"]
+
+  services:
+    user-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3001"
+    driver-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3002"
+    trip-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3003"
+    realtime-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3004"
+
+  middlewares:
+    cors:
+      headers:
+        accessControlAllowOriginList:
+          - "http://localhost:5173"
+          - "http://localhost:5174"
+        accessControlAllowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        accessControlAllowHeaders: ["Authorization", "Content-Type"]
+        accessControlMaxAge: 3600
+        addVaryHeader: true
+
+    jwt-auth:
+      forwardAuth:
+        address: "http://host.docker.internal:3001/auth/verify"
+        authResponseHeaders:
+          - "x-user-id"
+          - "x-user-role"

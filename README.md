@@ -18,25 +18,27 @@ WebSocket.
                                        │ REST + WebSocket (Socket.IO)
                                        ▼
                           ┌──────────────────────────┐
-                          │      API Gateway  :3000   │
-                          │  - JWT verify (guard)     │
-                          │  - REST reverse-proxy     │
-                          │  - WebSocket hub          │
-                          │    room: trip:<id>        │
-                          └───┬───────┬───────┬───────┘
-                              │       │       │  REST (sync)
-              ┌───────────────┘       │       └───────────────┐
-              ▼                       ▼                       ▼
-   ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
-   │  User Service :3001│  │ Driver Service:3002│  │  Trip Service :3003│
-   │  - register/login  │  │  - driver profiles │  │  - trip lifecycle  │
-   │  - JWT issuer      │  │  - Redis GEO match │  │  - matching engine │
-   │  - role PASSENGER/ │  │  - online presence │  │  - calls Driver Svc│
-   │    DRIVER          │  │  - location updates│  │    to assign driver│
-   └─────────┬──────────┘  └─────────┬──────────┘  └─────────┬──────────┘
-             │ schema=user           │ schema=driver         │ schema=trip
-             └───────────────┬───────┴───────────────┬───────┘
-                             ▼                       ▼
+                          │     Traefik edge   :80    │
+                          │  - single entry point     │
+                          │  - REST routing / LB      │
+                          │  - CORS middleware        │
+                          │  - JWT ForwardAuth        │
+                          │  - /socket.io → realtime  │
+                          │  dashboard          :8080 │
+                          └──┬────────┬────────┬──────┬┘
+                             │        │        │      │
+              ┌──────────────┘        │        │      └──────────────┐
+              ▼                       ▼        ▼                     ▼
+   ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+   │  User Service :3001│  │ Driver Service:3002│  │  Trip Service :3003│  │ Realtime Svc  :3004│
+   │  - register/login  │  │  - driver profiles │  │  - trip lifecycle  │  │  - Socket.IO hub   │
+   │  - JWT issuer      │  │  - Redis GEO match │  │  - matching engine │  │  - room trip:<id>  │
+   │  - /auth/verify    │  │  - online presence │  │  - calls Driver Svc│  │  - Redis Pub/Sub   │
+   │    (ForwardAuth)   │  │  - location updates│  │    to assign driver│  │    subscriber      │
+   └─────────┬──────────┘  └─────────┬──────────┘  └─────────┬──────────┘  └─────────┬──────────┘
+             │ schema=user           │ schema=driver         │ schema=trip            │
+             └───────────────┬───────┴───────────────┬───────┘                       │
+                             ▼                       ▼◄──────────────────────────────┘
                   ┌────────────────────┐  ┌────────────────────┐
                   │   PostgreSQL 16    │  │      Redis 7       │
                   │  one DB `rocket`,  │  │  - GEO matching    │
@@ -45,13 +47,22 @@ WebSocket.
                   └────────────────────┘  └────────────────────┘
 ```
 
+**Edge proxy (Traefik)**
+
+Traefik is the single public entry point on `:80`. It routes REST path prefixes
+(`/auth` `/users` `/drivers` `/trips`) to the backend services and `/socket.io`
+to the Realtime Service. CORS is handled by a Traefik middleware. Protected
+routes (`/users` `/drivers` `/trips`) go through a `ForwardAuth` middleware that
+calls `user-service` `/auth/verify` to validate the JWT; `/auth` is public.
+
 **Inter-service communication**
 
 - **Synchronous:** REST between services (e.g. Trip Service → Driver Service to
   assign a driver). Each cross-service call is wrapped in a thin client class so
   it can be swapped for gRPC later (see "Future: gRPC path").
 - **Asynchronous:** Redis Pub/Sub. Services publish trip/driver events; the
-  Gateway subscribes and broadcasts them to the WebSocket room `trip:<id>`.
+  Realtime Service subscribes and broadcasts them to the WebSocket room
+  `trip:<id>`.
 
 **Trip lifecycle:** `REQUESTED → ASSIGNED → ONGOING → COMPLETED`
 (plus `CANCELLED` and `NO_DRIVER`).
@@ -60,6 +71,7 @@ WebSocket.
 
 | Layer    | Tech |
 |----------|------|
+| Edge     | Traefik v3 (routing · LB · CORS · JWT ForwardAuth) |
 | Backend  | NestJS 11 · Prisma 7 · PostgreSQL 16 · Redis 7 (ioredis) · Socket.IO 4 · `nestjs-zod` |
 | Frontend | Vite + React 19 · TailwindCSS + shadcn/ui · TanStack React Query 5 · Axios · Leaflet |
 | Shared   | Zod contracts (`packages/contracts`) · Turborepo 2 · pnpm workspace |
@@ -78,10 +90,12 @@ WebSocket.
 
 | Service           | Port  | Notes |
 |-------------------|-------|-------|
-| API Gateway       | 3000  | single public entry point (REST + WebSocket) |
-| User Service      | 3001  | internal |
-| Driver Service    | 3002  | internal |
-| Trip Service      | 3003  | internal |
+| Traefik (edge)    | 80    | single public entry point (REST + WebSocket) |
+| Traefik dashboard | 8080  | routing/health UI |
+| User Service      | 3001  | internal (`/auth` `/users`) |
+| Driver Service    | 3002  | internal (`/drivers`) |
+| Trip Service      | 3003  | internal (`/trips`) |
+| Realtime Service  | 3004  | internal (`/socket.io` WebSocket hub) |
 | web-passenger     | 5173  | Vite dev server |
 | web-driver        | 5174  | Vite dev server |
 | PostgreSQL        | 55432* | host port, set by `POSTGRES_HOST_PORT` |
@@ -97,8 +111,11 @@ ports, edit `POSTGRES_HOST_PORT` / `REDIS_HOST_PORT` and keep `DATABASE_URL` /
 
 ## Quick start
 
+Traefik (edge proxy) always runs in Docker — it is the single entry point on
+`:80` and reaches the backend services via `host.docker.internal`.
+
 There are two ways to run the backend. **Path A (recommended for development)**
-runs only infra in Docker and the apps via `pnpm dev` — fast reloads, easy
+runs Traefik + infra in Docker and the apps via `pnpm dev` — fast reloads, easy
 debugging. **Path B** runs the 4 backend services in Docker too.
 
 The frontend apps are always run with `pnpm dev` (Vite).
@@ -110,10 +127,10 @@ cp .env.example .env          # then adjust ports if 5432/6379 are taken
 pnpm install
 ```
 
-### Path A — Infra in Docker, apps via pnpm (recommended)
+### Path A — Traefik + infra in Docker, apps via pnpm (recommended)
 
 ```bash
-# 1. Start Postgres + Redis only
+# 1. Start Traefik + Postgres + Redis
 docker compose up -d
 
 # 2. Apply database migrations (user / driver / trip schemas)
@@ -130,11 +147,14 @@ pnpm dev
 pnpm db:seed:online
 ```
 
+The 4 backend services (user / driver / trip / realtime) are reached through
+Traefik on <http://localhost>; the Traefik dashboard is at <http://localhost:8080>.
+
 ### Path B — Everything in Docker
 
 ```bash
-# Builds + runs the 4 backend services AND Postgres + Redis.
-# Each service runs `prisma migrate deploy` on startup.
+# Builds + runs the 4 backend services AND Traefik + Postgres + Redis.
+# The 3 Prisma services run `prisma migrate deploy` on startup.
 docker compose --profile backend up -d --build
 
 # Seed demo data (run from the host against the containers)
@@ -195,8 +215,8 @@ After `pnpm db:seed` the following accounts exist (password is `password` for al
 | `pnpm db:seed`           | seed users then drivers (sequential, idempotent) |
 | `pnpm db:seed:online`    | set the 5 seeded drivers ONLINE + located (calls Driver Service REST API) |
 | `pnpm type-check`        | type-check every package |
-| `docker compose up -d`   | start Postgres + Redis only |
-| `docker compose --profile backend up -d --build` | start infra + 4 backend services |
+| `docker compose up -d`   | start Traefik + Postgres + Redis |
+| `docker compose --profile backend up -d --build` | start edge + infra + 4 backend services |
 | `docker compose down -v` | stop everything and wipe DB/Redis volumes |
 
 ---
@@ -205,12 +225,15 @@ After `pnpm db:seed` the following accounts exist (password is `password` for al
 
 ```
 apps/
-  gateway/          API Gateway     — REST proxy + WebSocket hub
-  user-service/     auth, JWT, users
+  user-service/     auth, JWT, users, /auth/verify (ForwardAuth)
   driver-service/   driver profiles, Redis GEO matching
   trip-service/     trip lifecycle, matching engine
+  realtime-service/ Socket.IO hub — Redis Pub/Sub subscriber, room trip:<id>
+  driver-simulator/ scripted drivers that go online and move (demo helper)
   web-passenger/    Vite React app — passenger
   web-driver/       Vite React app — driver
+infra/
+  traefik/          edge proxy config — routers / services / middlewares
 packages/
   contracts/        Zod schemas + inferred types + enums + event names (shared FE/BE)
   redis/            ioredis wrapper + NestJS module
@@ -242,5 +265,5 @@ All service-to-service calls currently go over REST, but each one is wrapped in
 a thin client class (e.g. `DriverClient` in the Trip Service). Migrating to gRPC
 later means swapping the implementation inside those client classes — the
 calling code (controllers, services) does not change. The synchronous REST hops
-between services are the natural candidates for gRPC; the Gateway ↔ frontend
+between services are the natural candidates for gRPC; the Traefik ↔ frontend
 boundary stays REST + WebSocket.
