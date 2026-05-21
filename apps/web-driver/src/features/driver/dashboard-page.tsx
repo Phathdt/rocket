@@ -1,17 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
+import type { Marker as LeafletMarker } from 'leaflet';
+import { Power, Loader2, Navigation, Square, CarFront, LogOut, Circle } from 'lucide-react';
 import { toast } from 'sonner';
 import { DriverStatus } from '@rocket/contracts';
 import '@/features/driver/leaflet-fix';
 import 'leaflet/dist/leaflet.css';
 
 import { useAuth } from '@/features/auth/auth-context';
-import { useDriverByUserIdQuery, useUpdateDriverStatusMutation, useUpdateDriverLocationMutation } from './use-driver-queries';
+import {
+  useDriverByUserIdQuery,
+  useUpdateDriverStatusMutation,
+  useUpdateDriverLocationMutation,
+} from './use-driver-queries';
 import { useAssignedTripQuery } from '@/features/trip/use-assigned-trip-query';
 import { useTripSocket } from '@/features/trip/use-trip-socket';
 import { CreateProfileForm } from './create-profile-form';
 import { TripPanel } from '@/features/trip/trip-panel';
+import { selfDriverIcon, pickupIcon, dropoffIcon } from './map-markers';
+import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,22 +31,16 @@ const AUTO_DRIVE_STEP = 0.0003; // ~33m per tick
 const TILE_URL =
   import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-// Custom driver marker icon
-const driverIcon = L.divIcon({
-  html: '🚗',
-  className: 'driver-marker',
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
+type BadgeVariant = 'success' | 'warning' | 'secondary';
 
-function statusVariant(status: string) {
+function driverStatusMeta(status: DriverStatus): { variant: BadgeVariant; label: string } {
   switch (status) {
     case DriverStatus.ONLINE:
-      return 'success' as const;
+      return { variant: 'success', label: 'Online' };
     case DriverStatus.BUSY:
-      return 'warning' as const;
+      return { variant: 'warning', label: 'On a trip' };
     default:
-      return 'secondary' as const;
+      return { variant: 'secondary', label: 'Offline' };
   }
 }
 
@@ -101,11 +102,15 @@ export function DashboardPage() {
     );
   }, [driver, updateStatusMutation]);
 
-  // Loading / error state
+  // Loading state
   if (driverQuery.isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading driver profile…</p>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-gradient-to-br from-slate-50 via-emerald-50 to-green-100">
+        <BrandMark subtitle="Driver" />
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Loading your profile…
+        </p>
       </div>
     );
   }
@@ -123,28 +128,37 @@ export function DashboardPage() {
   }
 
   const isOnline = driver?.status !== DriverStatus.OFFLINE;
+  const status = driver ? driverStatusMeta(driver.status) : null;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Top bar */}
-      <header className="flex items-center justify-between border-b bg-white px-4 py-2 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-primary">Rocket</span>
-          <span className="text-sm text-muted-foreground">Driver</span>
-          {driver && (
-            <Badge variant={statusVariant(driver.status)} className="ml-1">
-              {driver.status}
+      <header className="z-20 flex items-center justify-between gap-3 border-b border-white/60 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <BrandMark subtitle="Driver" />
+          {status && (
+            <Badge variant={status.variant}>
+              <Circle
+                className={
+                  driver?.status === DriverStatus.OFFLINE ? 'h-2 w-2' : 'h-2 w-2 fill-current'
+                }
+                aria-hidden="true"
+              />
+              {status.label}
             </Badge>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm">{user?.name}</span>
-          {driver && (
-            <span className="hidden text-xs text-muted-foreground sm:block">
-              {driver.vehiclePlate} · {driver.vehicleModel}
-            </span>
-          )}
+          <div className="hidden text-right sm:block">
+            <p className="text-sm font-medium text-foreground">{user?.name}</p>
+            {driver && (
+              <p className="text-xs text-muted-foreground">
+                {driver.vehiclePlate} · {driver.vehicleModel}
+              </p>
+            )}
+          </div>
           <Button variant="outline" size="sm" onClick={logout}>
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign out
           </Button>
         </div>
@@ -165,11 +179,11 @@ export function DashboardPage() {
 
           <Marker
             position={position}
-            icon={driverIcon}
+            icon={selfDriverIcon}
             draggable
             eventHandlers={{
               dragend(e) {
-                const { lat, lng } = (e.target as L.Marker).getLatLng();
+                const { lat, lng } = (e.target as LeafletMarker).getLatLng();
                 setPosition([lat, lng]);
               },
             }}
@@ -180,24 +194,24 @@ export function DashboardPage() {
           {/* Show pickup/dropoff markers when a trip is active */}
           {activeTrip && (
             <>
-              <Marker position={[activeTrip.pickupLat, activeTrip.pickupLng]}>
-                <Popup>Pickup</Popup>
+              <Marker position={[activeTrip.pickupLat, activeTrip.pickupLng]} icon={pickupIcon}>
+                <Popup>Pickup (A)</Popup>
               </Marker>
-              <Marker position={[activeTrip.dropoffLat, activeTrip.dropoffLng]}>
-                <Popup>Dropoff</Popup>
+              <Marker position={[activeTrip.dropoffLat, activeTrip.dropoffLng]} icon={dropoffIcon}>
+                <Popup>Dropoff (B)</Popup>
               </Marker>
             </>
           )}
         </MapContainer>
 
         {/* Control panel — bottom overlay */}
-        <div className="absolute bottom-4 left-1/2 z-10 w-full max-w-sm -translate-x-1/2 space-y-2 px-4">
+        <div className="absolute bottom-4 left-1/2 z-10 w-full max-w-md -translate-x-1/2 space-y-2 px-4">
           {/* Active trip panel */}
           {activeTrip && <TripPanel trip={activeTrip} />}
 
           {/* Driver controls */}
-          <Card className="shadow-lg">
-            <CardContent className="pt-4 space-y-3">
+          <Card className="border-white/70 bg-white/85 shadow-xl backdrop-blur-lg">
+            <CardContent className="space-y-3 pt-6">
               <div className="flex gap-2">
                 <Button
                   className="flex-1"
@@ -205,11 +219,16 @@ export function DashboardPage() {
                   onClick={handleStatusToggle}
                   disabled={updateStatusMutation.isPending}
                 >
+                  {updateStatusMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Power className="h-4 w-4" aria-hidden="true" />
+                  )}
                   {updateStatusMutation.isPending
                     ? 'Updating…'
                     : isOnline
-                      ? 'Go Offline'
-                      : 'Go Online'}
+                      ? 'Go offline'
+                      : 'Go online'}
                 </Button>
 
                 <Button
@@ -218,14 +237,24 @@ export function DashboardPage() {
                   disabled={!isOnline}
                   title="Auto-drive simulates movement by nudging the marker every 2s"
                 >
-                  {autoDrive ? 'Stop auto' : 'Auto-drive'}
+                  {autoDrive ? (
+                    <Square className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Navigation className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {autoDrive ? 'Stop' : 'Auto-drive'}
                 </Button>
               </div>
 
-              <p className="text-xs text-muted-foreground text-center">
-                {isOnline
-                  ? 'Location sent every 4s. Drag the marker to change position.'
-                  : 'Go online to start accepting rides.'}
+              <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+                {isOnline ? (
+                  <>
+                    <CarFront className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    Location sent every 4s. Drag the marker to move.
+                  </>
+                ) : (
+                  'Go online to start accepting rides.'
+                )}
               </p>
             </CardContent>
           </Card>
