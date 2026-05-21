@@ -1,0 +1,15 @@
+# Git hooks — https://lefthook.dev
+# Installed via the root `prepare` script (`lefthook install`).
+
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: '*.{ts,tsx,js,jsx,json,jsonc,md,yml,yaml,css}'
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    lint:
+      glob: '*.{ts,tsx,js,jsx}'
+      run: pnpm exec oxlint {staged_files}
+    test:
+      run: pnpm test
