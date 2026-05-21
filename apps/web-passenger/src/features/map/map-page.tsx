@@ -1,19 +1,20 @@
 import { useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLng } from 'leaflet';
-import L from 'leaflet';
+import { LogOut } from 'lucide-react';
 import { TripStatus } from '@rocket/contracts';
 import { toast } from 'sonner';
 import '@/features/map/leaflet-fix';
 import 'leaflet/dist/leaflet.css';
 
 import { MapClickHandler } from './map-click-handler';
-import { TripStatusBadge } from './trip-status-badge';
+import { TripPanel } from './trip-panel';
+import { pickupIcon, dropoffIcon, driverIcon } from './map-markers';
 import { useTripMutation } from './use-trip-mutation';
 import { useTripSocket } from '@/features/trip/use-trip-socket';
 import { useAuth } from '@/features/auth/auth-context';
+import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import type { Trip } from '@/types/trip';
 
 const DEFAULT_CENTER: [number, number] = [10.7769, 106.7009]; // Ho Chi Minh City
@@ -21,13 +22,6 @@ const DEFAULT_ZOOM = 13;
 
 const TILE_URL =
   import.meta.env.VITE_MAP_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-const driverIcon = L.divIcon({
-  html: '🚗',
-  className: 'driver-marker',
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
 
 function RecenterMap({ center }: { center: [number, number] }) {
   const map = useMap();
@@ -50,7 +44,7 @@ export function MapPage() {
 
   const handlePickup = useCallback((latlng: LatLng) => {
     setPickup(latlng);
-    toast.info('Pickup set. Click map again to set dropoff.');
+    toast.info('Pickup set. Tap the map again to set your dropoff.');
   }, []);
 
   const handleDropoff = useCallback((latlng: LatLng) => {
@@ -88,23 +82,17 @@ export function MapPage() {
     );
   };
 
-  const isSearching = tripMutation.isPending;
   const hasTrip = !!activeTrip;
-  const isNoDriver = currentStatus === TripStatus.NO_DRIVER;
-  const isCompleted =
-    currentStatus === TripStatus.COMPLETED || currentStatus === TripStatus.CANCELLED;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {/* Top bar */}
-      <header className="flex items-center justify-between border-b bg-white px-4 py-2 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-primary">Rocket</span>
-          <span className="text-sm text-muted-foreground">Passenger</span>
-        </div>
+      <header className="z-20 flex items-center justify-between border-b border-white/60 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-md">
+        <BrandMark subtitle="Passenger" />
         <div className="flex items-center gap-3">
-          <span className="text-sm">{user?.name}</span>
+          <span className="hidden text-sm font-medium text-foreground sm:inline">{user?.name}</span>
           <Button variant="outline" size="sm" onClick={logout}>
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign out
           </Button>
         </div>
@@ -133,13 +121,13 @@ export function MapPage() {
           )}
 
           {pickup && (
-            <Marker position={pickup}>
+            <Marker position={pickup} icon={pickupIcon}>
               <Popup>Pickup (A)</Popup>
             </Marker>
           )}
 
           {dropoff && (
-            <Marker position={dropoff}>
+            <Marker position={dropoff} icon={dropoffIcon}>
               <Popup>Dropoff (B)</Popup>
             </Marker>
           )}
@@ -154,66 +142,18 @@ export function MapPage() {
           )}
         </MapContainer>
 
-        {/* Floating bottom panel */}
-        <div className="absolute bottom-4 left-1/2 z-10 w-full max-w-sm -translate-x-1/2 px-4">
-          <Card className="shadow-lg">
-            <CardContent className="pt-4">
-              {!hasTrip && (
-                <>
-                  <p className="mb-3 text-sm text-muted-foreground">
-                    {!pickup
-                      ? 'Click the map to set your pickup point (A).'
-                      : !dropoff
-                        ? 'Click the map to set your dropoff point (B).'
-                        : 'Ready! Click "Find driver" to request a ride.'}
-                  </p>
-
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1"
-                      onClick={handleFindDriver}
-                      disabled={!pickup || !dropoff || isSearching}
-                    >
-                      {isSearching ? 'Searching…' : 'Find driver'}
-                    </Button>
-                    {(pickup || dropoff) && (
-                      <Button variant="outline" onClick={handleReset}>
-                        Reset
-                      </Button>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {hasTrip && currentStatus && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Trip status</span>
-                    <TripStatusBadge status={currentStatus} />
-                  </div>
-
-                  {isNoDriver && (
-                    <p className="text-sm text-muted-foreground">
-                      No drivers are available in your area right now. Please try again in a few
-                      minutes.
-                    </p>
-                  )}
-
-                  {activeTrip.driverId && !isNoDriver && (
-                    <p className="text-xs text-muted-foreground">
-                      Driver ID: {activeTrip.driverId}
-                    </p>
-                  )}
-
-                  {(isCompleted || isNoDriver) && (
-                    <Button variant="outline" className="w-full" onClick={handleReset}>
-                      Book another ride
-                    </Button>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Floating glass panel */}
+        <div className="absolute bottom-4 left-1/2 z-10 w-full max-w-md -translate-x-1/2 px-4">
+          <TripPanel
+            pickupSet={!!pickup}
+            dropoffSet={!!dropoff}
+            status={currentStatus}
+            hasTrip={hasTrip}
+            driverId={activeTrip?.driverId ?? null}
+            isSearching={tripMutation.isPending}
+            onFindDriver={handleFindDriver}
+            onReset={handleReset}
+          />
         </div>
       </div>
     </div>
